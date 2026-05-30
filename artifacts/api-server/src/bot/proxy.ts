@@ -611,7 +611,14 @@ async function fetchOnce(
 
     if (!ok) {
       if (kind === "proxy" && proxyUrl && validity.blockType) {
-        handleFailedProxy(proxyUrl, validity.blockType);
+        // Reddit blocks JSON API access with 403/429 by default for logged-out requests.
+        // We only place the proxy on cooldown if:
+        // 1. It is not a JSON request, OR
+        // 2. The block is a Cloudflare or Captcha challenge (which affects both HTML and JSON).
+        const isJsonApiBlock = acceptHeader.includes("json") && (validity.blockType === "ip_ban" || validity.blockType === "rate_limit" || validity.blockType === "bad_json");
+        if (!isJsonApiBlock) {
+          handleFailedProxy(proxyUrl, validity.blockType);
+        }
       }
       logger.warn({ via, status: res.status, blockType: validity.blockType, url }, "Fetch failed validity check");
       throw new Error(`Invalid response: ${validity.blockType ?? "unknown"}`);
