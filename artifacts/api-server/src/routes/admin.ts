@@ -2447,6 +2447,133 @@ router.post("/reddit-bulk-check", requireAuth, async (req, res) => {
   res.json({ results, summary });
 });
 
+// ---------------------------------------------------------------------------
+// POST /admin/reddit-post-check
+// Bulk-checks whether Reddit POST URLs (not comment URLs) are live, removed,
+// deleted, or not found.  Accepts up to 100 post URLs per request.
+// ---------------------------------------------------------------------------
+router.post("/reddit-post-check", requireAuth, async (req, res) => {
+  const body = req.body as { urls?: unknown };
+  const rawUrls = Array.isArray(body?.urls) ? body!.urls : [];
+  const urls = rawUrls
+    .filter((u): u is string => typeof u === "string")
+    .map((u) => u.trim())
+    .filter((u) => u.length > 0)
+    .slice(0, 100);
+
+  if (urls.length === 0) {
+    res.status(400).json({ error: "Provide at least one URL in `urls` (max 100)." });
+    return;
+  }
+
+  type PostRow = {
+    url: string;
+    ok: boolean;
+    liveStatus: "live" | "removed" | "deleted" | "not_found" | "error";
+    subreddit: string | null;
+    postId: string | null;
+    removalReason: string | null;
+    removalBy: string | null;
+    error: string | null;
+  };
+
+  const REMOVAL_BY_LABEL: Record<string, string> = {
+    deleted_by_author: "Deleted by author",
+    removed_by_mod: "Removed by mod",
+    removed_by_reddit: "Removed by Reddit",
+    removed_by_automod: "Filtered by AutoMod",
+    not_found: "Not found (404)",
+  };
+
+  async function checkPost(rawUrl: string): Promise<PostRow> {
+    const base: PostRow = {
+      url: rawUrl, ok: false, liveStatus: "error",
+      subreddit: null, postId: null,
+      removalReason: null, removalBy: null, error: null,
+    };
+    try {
+      let url = rawUrl;
+
+      // Resolve share links (reddit.com/r/sub/s/XXXX)
+      const appKind = detectAppUrl(rawUrl);
+      if (appKind === "share_link_resolvable") {
+        const resolved = await resolveShareLink(rawUrl);
+        if (resolved) url = resolved;
+      }
+
+      const parsed = parseRedditProofUrl(url);
+      if (!parsed) {
+        return { ...base, error: "Not a valid Reddit post URL." };
+      }
+
+      // If this is actually a comment URL, strip the comment part and check
+      // the post itself.
+      const postUrl = `https://www.reddit.com/r/${parsed.subreddit}/comments/${parsed.postId}/`;
+
+      const result = await recheckRedditLiveness(postUrl);
+
+      if (result.liveStatus === "unknown") {
+        return {
+          ...base, url,
+          liveStatus: "error",
+          subreddit: parsed.subreddit,
+          postId: parsed.postId,
+          error: result.reason ?? result.statusLabel ?? "Reddit unreachable — could not determine status",
+        };
+      }
+
+      const liveStatus: PostRow["liveStatus"] =
+        result.liveStatus === "live" ? "live"
+        : result.liveStatus === "removed" ? "removed"
+        : result.liveStatus === "deleted" ? "deleted"
+        : result.liveStatus === "not_found" ? "not_found"
+        : "error";
+
+      const isRemoved = liveStatus === "removed" || liveStatus === "deleted";
+      const removalBy = isRemoved && result.detailedStatus
+        ? (REMOVAL_BY_LABEL[result.detailedStatus] ?? result.statusLabel ?? null)
+        : null;
+
+      return {
+        url,
+        ok: true,
+        liveStatus,
+        subreddit: parsed.subreddit,
+        postId: parsed.postId,
+        removalReason: isRemoved ? (result.reason ?? null) : null,
+        removalBy,
+        error: null,
+      };
+    } catch (err) {
+      const msg = (err as Error)?.message ?? String(err);
+      return { ...base, error: msg };
+    }
+  }
+
+  const results: PostRow[] = new Array(urls.length);
+  const CONCURRENCY = 5;
+  let cursor = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, urls.length) }, async () => {
+      while (true) {
+        const idx = cursor++;
+        if (idx >= urls.length) return;
+        results[idx] = await checkPost(urls[idx]!);
+      }
+    }),
+  );
+
+  const summary = {
+    total: results.length,
+    live: results.filter((r) => r.liveStatus === "live").length,
+    removed: results.filter((r) => r.liveStatus === "removed" || r.liveStatus === "deleted").length,
+    notFound: results.filter((r) => r.liveStatus === "not_found").length,
+    errored: results.filter((r) => r.liveStatus === "error").length,
+  };
+
+  res.json({ results, summary });
+});
+
 router.get("/console-logs", requireAuth, async (req, res) => {
   const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit ?? "100"))));
   res.json({ logs: getInMemoryLogs().slice(-limit) });
