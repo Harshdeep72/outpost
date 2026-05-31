@@ -15,7 +15,6 @@ services:
     region: oregon
     branch: main
     autoDeploy: true
-    nodeVersion: 20
     # We deliberately AVOID `npm install -g pnpm` and `corepack enable`
     # because both try to write to /usr/lib or /usr/bin which are read-only
     # on Render (EROFS). `npx --yes pnpm@9.15.0 ...` downloads pnpm into
@@ -32,7 +31,10 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_VERSION
+        value: 20
       # The following must be set manually in the Render dashboard
       # (Settings → Environment) — they are NOT committed here:
       #   DATABASE_URL, SESSION_SECRET, DISCORD_TOKEN, DISCORD_CLIENT_ID,
       #   DISCORD_CLIENT_SECRET, DISCORD_GUILD_ID, ADMIN_*, etc.
+
