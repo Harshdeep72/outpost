@@ -1171,10 +1171,23 @@ export async function recheckRedditLiveness(proofUrl: string): Promise<LivenessR
       entry.includes(`<id>t3_${parsed.postId.toLowerCase()}</id>`)
     ) {
       postFound = true;
+      // Check the entry title for removal signals first.
+      // Reddit sets the title to "[deleted]" when a post is deleted by its author.
+      const entryTitleMatch = /<title[^>]*>([^<]*)<\/title>/i.exec(entry);
+      const entryTitle = decodeRssContent(entryTitleMatch?.[1] ?? "").trim();
+      if (/^\[(?:removed|deleted)\]$/i.test(entryTitle)) {
+        postRemoved = true;
+      }
+
+      // Check the entry content body.
+      // Reddit appends boilerplate after the sentinel, e.g.:
+      //   "[removed]  submitted by  /u/Username [link]  [comments]"
+      // So we cannot use a strict exact-match — check that the content
+      // STARTS WITH the removal sentinel (after stripping HTML/entities).
       const contentMatch = /<content[^>]*>([\s\S]*?)<\/content>/i.exec(entry);
       if (contentMatch) {
         const plain = decodeRssContent(contentMatch[1]).trim();
-        if (/^\[removed\]$/i.test(plain) || /^\[deleted\]$/i.test(plain)) {
+        if (/^\[removed\]/i.test(plain) || /^\[deleted\]/i.test(plain)) {
           postRemoved = true;
         }
       }
