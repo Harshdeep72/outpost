@@ -1,4 +1,5 @@
 import { logger } from "../lib/logger.js";
+import { proxyFetchText } from "./proxy.js";
 
 export interface RedditProfile {
   name: string;
@@ -175,6 +176,137 @@ async function fetchViaOAuth(name: string): Promise<RedditFetchResult | null> {
 }
 
 
+/**
+ * Scrape old.reddit.com/user/{name}/about HTML to extract karma and account age.
+ *
+ * old.reddit.com user profile pages are still publicly accessible and contain
+ * karma numbers in the sidebar HTML even without authentication.
+ *
+ * Extracts:
+ *   - Link karma:    <span class="karma link-karma">N</span>
+ *   - Comment karma: <span class="karma comment-karma">N</span>
+ *   - Created date:  <span class="age">...<time datetime="ISO">...</time></span>
+ *
+ * Returns null if the page could not be fetched or parsed.
+ */
+async function fetchViaHtmlScrape(name: string): Promise<RedditFetchResult | null> {
+  const profileUrls = [
+    `https://old.reddit.com/user/${name}/about`,
+    `https://old.reddit.com/user/${name}`,
+    `https://www.reddit.com/user/${name}/about`,
+  ];
+
+  let html: string | null = null;
+  try {
+    html = await proxyFetchText(profileUrls, { timeoutMs: 12_000, acceptHeader: "text/html, */*" });
+  } catch (err) {
+    logger.warn({ err, name }, "fetchViaHtmlScrape: proxyFetchText threw");
+    return null;
+  }
+
+  if (!html) {
+    logger.warn({ name }, "fetchViaHtmlScrape: no HTML returned");
+    return null;
+  }
+
+  // Verify this actually looks like an old.reddit user profile page
+  const isUserPage =
+    html.includes('class="titlebox"') ||
+    html.includes('class="karma link-karma"') ||
+    html.includes('class="karma comment-karma"') ||
+    html.includes("redditor for") ||
+    html.includes(`/user/${name}`);
+
+  if (!isUserPage) {
+    logger.warn({ name, htmlLen: html.length }, "fetchViaHtmlScrape: response doesn't look like a user profile page");
+    return null;
+  }
+
+  // ── Detect suspended / banned accounts ────────────────────────────────────
+  if (
+    html.includes("has been suspended") ||
+    html.includes("account has been suspended") ||
+    html.includes("page not found") && html.toLowerCase().includes("sorry")
+  ) {
+    logger.info({ name }, "fetchViaHtmlScrape: account suspended/not found");
+    return { ok: false, notFound: true, suspended: true };
+  }
+
+  // ── Detect private / user-not-found pages ─────────────────────────────────
+  if (
+    (html.includes("page not found") || html.includes("there doesn't seem to be anything here")) &&
+    !html.includes('class="karma')
+  ) {
+    logger.info({ name }, "fetchViaHtmlScrape: user not found");
+    return { ok: false, notFound: true };
+  }
+
+  // ── Parse link karma ───────────────────────────────────────────────────────
+  // old.reddit: <span class="karma link-karma">1,234</span>
+  // Also handles: <span class="karma">1,234</span> (total only) on some layouts
+  const linkKarmaMatch = /class="karma link-karma"[^>]*>([\d,]+)</.exec(html);
+  const commentKarmaMatch = /class="karma comment-karma"[^>]*>([\d,]+)</.exec(html);
+
+  const parseKarma = (s: string): number => parseInt(s.replace(/,/g, ""), 10) || 0;
+
+  const linkKarma    = linkKarmaMatch    ? parseKarma(linkKarmaMatch[1])    : 0;
+  const commentKarma = commentKarmaMatch ? parseKarma(commentKarmaMatch[1]) : 0;
+  const totalKarma   = linkKarma + commentKarma;
+
+  // If we couldn't extract any karma numbers at all, this page isn't useful
+  if (!linkKarmaMatch && !commentKarmaMatch) {
+    logger.warn({ name, htmlLen: html.length }, "fetchViaHtmlScrape: no karma elements found in HTML");
+    return null;
+  }
+
+  // ── Parse account creation date ────────────────────────────────────────────
+  // old.reddit: <span class="age">redditor for <time datetime="2020-01-01T00:00:00+00:00" title="...">N years</time></span>
+  let createdUtc = 0;
+  const ageMatch = /class="age"[^>]*>[\s\S]{0,80}?<time[^>]+datetime="([^"]+)"/.exec(html);
+  if (ageMatch) {
+    const parsed = Date.parse(ageMatch[1]);
+    if (!isNaN(parsed)) createdUtc = Math.floor(parsed / 1000);
+  }
+
+  // Fallback: look for any <time datetime="..."> near "redditor"
+  if (!createdUtc) {
+    const redditorIdx = html.toLowerCase().indexOf("redditor");
+    if (redditorIdx !== -1) {
+      const segment = html.substring(redditorIdx, redditorIdx + 300);
+      const timeMatch = /datetime="([^"]+)"/.exec(segment);
+      if (timeMatch) {
+        const parsed = Date.parse(timeMatch[1]);
+        if (!isNaN(parsed)) createdUtc = Math.floor(parsed / 1000);
+      }
+    }
+  }
+
+  const ageDays = createdUtc
+    ? Math.floor((Date.now() / 1000 - createdUtc) / 86400)
+    : 0;
+
+  // ── Resolve canonical username from page ────────────────────────────────────
+  const usernameMatch = /\/user\/([A-Za-z0-9_-]{3,20})\//.exec(html);
+  const resolvedName = usernameMatch ? usernameMatch[1] : name;
+
+  logger.info({ name: resolvedName, linkKarma, commentKarma, ageDays }, "Reddit profile via old.reddit HTML scrape");
+
+  return {
+    ok: true,
+    profile: {
+      name: resolvedName,
+      createdUtc,
+      linkKarma,
+      commentKarma,
+      totalKarma,
+      iconImg: undefined,
+      accountAgeDays: ageDays,
+      karmaVerified: true,
+    },
+  };
+}
+
+
 async function fetchFresh(name: string): Promise<RedditFetchResult> {
   // ── 1. Try OAuth (authenticated, no IP block, future-proof) ───────────────
   const oauthResult = await fetchViaOAuth(name);
@@ -183,9 +315,19 @@ async function fetchFresh(name: string): Promise<RedditFetchResult> {
     return oauthResult;
   }
 
-  // ── 2. OAuth not configured — fall back to user RSS via proxies ────────────
-  // Unauthenticated JSON access has been deprecated by Reddit.
-  logger.info({ name }, "OAuth not configured — trying user RSS via proxies");
+  // ── 2. Scrape old.reddit.com user profile HTML (karma + age, no auth needed)
+  // old.reddit HTML pages are still publicly accessible and contain karma data
+  // even though the unauthenticated JSON API has been deprecated.
+  logger.info({ name }, "OAuth not configured — trying old.reddit HTML scrape via proxies");
+  const htmlResult = await fetchViaHtmlScrape(name);
+  if (htmlResult !== null) {
+    logger.info({ name, ok: htmlResult.ok }, "Reddit profile via HTML scrape");
+    return htmlResult;
+  }
+
+  // ── 3. Last resort: user RSS via proxies (no karma, triggers manual review) ─
+  // RSS feeds are still available but do NOT contain karma data.
+  logger.info({ name }, "HTML scrape failed — falling back to user RSS (no karma data)");
 
   const rssUrls = [
     `https://www.reddit.com/user/${name}/.rss`,
@@ -235,7 +377,7 @@ async function fetchFresh(name: string): Promise<RedditFetchResult> {
   }
 
   if (!rssText) {
-    logger.warn({ name, status: result.status }, "All user profile fetches failed — sending to manual review");
+    logger.warn({ name }, "All user profile fetches failed — sending to manual review");
     return { ok: false, notFound: false, networkError: true };
   }
 
