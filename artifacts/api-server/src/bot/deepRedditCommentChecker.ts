@@ -1,5 +1,5 @@
 import { logger } from "../lib/logger.js";
-import { proxyFetchText, proxyFetchJson } from "./proxy.js";
+import { proxyFetchText } from "./proxy.js";
 import { parseRedditProofUrl, extractTaskSubreddit, extractTaskPostId, SubmissionStatus, ValidationResult } from "./reddit-validator.js";
 import { commentValidationCache } from "./cache.js";
 import { getOAuthToken, invalidateOAuthToken } from "./reddit.js";
@@ -117,36 +117,6 @@ async function fetchCommentThreadViaOAuth(
     return { ok: true, body };
   } catch (err) {
     logger.warn({ err }, "Reddit OAuth comment thread fetch error");
-    return null;
-  }
-}
-
-/**
- * Fetch a comment thread via Reddit's unauthenticated .json endpoint through
- * the proxy pool. Works without OAuth credentials — residential proxies bypass
- * Reddit's datacenter IP blocks and the browser UA gets past basic bot checks.
- *
- * Returns the parsed Reddit JSON array body, or null on failure.
- */
-async function fetchCommentThreadViaProxyJson(
-  sub: string,
-  postId: string,
-  commentId: string
-): Promise<{ ok: boolean; body: any } | null> {
-  const urls = [
-    `https://www.reddit.com/${sub}/comments/${postId}/_/${commentId}.json?raw_json=1&context=3`,
-    `https://old.reddit.com/${sub}/comments/${postId}/_/${commentId}.json?raw_json=1&context=3`,
-  ];
-  try {
-    const result = await proxyFetchJson(urls, { timeoutMs: 8000, acceptHeader: "application/json" });
-    if (!result.ok || !Array.isArray(result.body)) {
-      logger.warn({ status: result.status, sub, postId, commentId }, "Proxy JSON comment fetch: non-array response");
-      return null;
-    }
-    logger.info({ sub, postId, commentId }, "Proxy JSON comment fetch succeeded");
-    return { ok: true, body: result.body };
-  } catch (err) {
-    logger.warn({ err, sub, postId, commentId }, "Proxy JSON comment thread fetch failed");
     return null;
   }
 }
@@ -320,7 +290,11 @@ export function parseHtmlComment(html: string, commentId: string): ParsedHtmlCom
     };
   }
 
-  // Check if it's a shreddit page but the comment is not found
+  // Check if it's a shreddit page but the comment is not found.
+  // Shreddit (new Reddit) lazy-loads comments via JS — the specific comment
+  // being absent from the initial HTML does NOT mean it was removed.
+  // We return isRemoved: false here so callers know this result is inconclusive
+  // and should defer to RSS rather than locking in a "deleted" verdict.
   const isShredditPage = html.includes("<shreddit-comment-tree") || html.includes("<shreddit-app") || html.includes("shreddit-");
   if (isShredditPage) {
     return {
@@ -328,7 +302,7 @@ export function parseHtmlComment(html: string, commentId: string): ParsedHtmlCom
       author: null,
       subreddit: null,
       createdAt: null,
-      isRemoved: true,
+      isRemoved: false,
       body: null,
       validPage: true
     };
@@ -522,29 +496,39 @@ async function runDeepCheck(
       } else {
         // Comment not found on a valid Reddit page.
         //
-        // In liveness-only mode (expectedLowerList empty), only commit to a
-        // removal verdict when JSON also confirmed the comment is gone. If
-        // JSON was unavailable (403/blocked), we have a single source saying
-        // "not found" which could be a bad proxy page — treat as inconclusive
-        // to avoid reversing a payout on a live comment.
-        if (expectedLowerList.length === 0 && !jsonSucceeded) {
-          logger.warn(
+        // Only old.reddit is fully server-rendered, so only old.reddit's
+        // "not found" is a reliable removal signal (parsedHtml.isRemoved: true).
+        // Shreddit lazy-loads comments via JS — absence in initial HTML is
+        // inconclusive, so we fall through to RSS instead of locking in "deleted".
+        if (!parsedHtml.isRemoved) {
+          logger.info(
             { commentId: parsed.commentId },
-            "Deep check: HTML says not found but JSON was unavailable — treating as inconclusive (liveness mode)"
+            "Deep check: shreddit page didn't include comment (lazy-loaded?) — deferring to RSS"
           );
-          return {
-            passed: false,
-            autoApproved: false,
-            status: "api_unreachable",
-            failures: ["Comment not found in HTML verification but Reddit JSON API was unavailable — treating as inconclusive."],
-            subredditFound: subredditFound ?? parsed.subreddit,
-            postLive: true,
-            ...meta("api_unreachable"),
-          };
+          // Leave authorFound null so execution falls through to the RSS step.
+        } else {
+          // old.reddit confirmed the comment is not present — treat as removed.
+          // In liveness-only mode still require JSON corroboration to avoid
+          // false reversals from a bad/intercepted proxy page.
+          if (expectedLowerList.length === 0 && !jsonSucceeded) {
+            logger.warn(
+              { commentId: parsed.commentId },
+              "Deep check: old.reddit HTML says not found but JSON was unavailable — treating as inconclusive (liveness mode)"
+            );
+            return {
+              passed: false,
+              autoApproved: false,
+              status: "api_unreachable",
+              failures: ["Comment not found in HTML verification — treating as inconclusive pending manual review."],
+              subredditFound: subredditFound ?? parsed.subreddit,
+              postLive: true,
+              ...meta("api_unreachable"),
+            };
+          }
+          commentStatus = "comment_deleted";
+          authorFound = Array.isArray(expectedAuthor) ? expectedAuthor[0] : expectedAuthor;
+          if (!authorFound) authorFound = "__deleted__";
         }
-        commentStatus = "comment_deleted";
-        authorFound = Array.isArray(expectedAuthor) ? expectedAuthor[0] : expectedAuthor;
-        if (!authorFound) authorFound = "__deleted__";
       }
     }
   }
@@ -572,13 +556,15 @@ async function runDeepCheck(
       }
     }
     
-    // RSS requires HTML verification since RSS caches deleted comments
+    // RSS requires HTML cross-check since RSS caches deleted comments.
+    // However, only old.reddit is authoritative — shreddit lazy-loads comments
+    // so "not found in shreddit HTML" is inconclusive and we trust RSS instead.
     if (authorFound && htmlContent) {
       const parsedHtml = parseHtmlComment(htmlContent, parsed.commentId);
       if (parsedHtml.validPage) {
-        if (parsedHtml.found && parsedHtml.isRemoved) {
-          commentStatus = "comment_deleted";
-        } else if (!parsedHtml.found) {
+        // parsedHtml.isRemoved is true ONLY for old.reddit confirmed removal.
+        // For shreddit not-found it is false — in that case trust RSS.
+        if (parsedHtml.isRemoved) {
           commentStatus = "comment_deleted";
         }
       } else {
