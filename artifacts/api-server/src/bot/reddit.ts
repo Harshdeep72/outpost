@@ -1,5 +1,5 @@
 import { logger } from "../lib/logger.js";
-import { proxyFetchText } from "./proxy.js";
+import { proxyFetchText, proxyFetchJson } from "./proxy.js";
 
 export interface RedditProfile {
   name: string;
@@ -373,11 +373,11 @@ async function fetchViaPublicFrontend(name: string): Promise<RedditFetchResult |
 }
 
 /**
- * Direct JSON probe — try the public about.json endpoint without proxies or auth.
+ * Direct JSON probe — try the public about.json endpoint, routing through the
+ * proxy pool when proxies are configured so Render's datacenter IP is masked.
  *
- * Reddit "deprecated" unauthenticated API access in mid-2023 but the user-about
- * endpoint is still reachable from many hosting IPs. Attempt is cheap (< 1 s to
- * fail) so we always try it before falling back to slower scraping methods.
+ * proxyFetchJson races up to 3 proxies + a direct fallback simultaneously.
+ * If no proxies are loaded it behaves identically to a plain direct request.
  * On success we get real, verified karma. On failure we return null and the
  * caller falls through to the next method.
  */
@@ -388,52 +388,42 @@ async function fetchViaDirectJson(name: string): Promise<RedditFetchResult | nul
   ];
 
   try {
-    const { fetch: undiciFetch, Agent } = await import("undici");
-    const agent = new Agent({ connect: { timeout: 4_000 }, bodyTimeout: 6_000, headersTimeout: 6_000 });
+    const result = await proxyFetchJson(candidates, {
+      timeoutMs: 10_000,
+      acceptHeader: "application/json",
+    });
 
-    for (const url of candidates) {
-      try {
-        const res = await undiciFetch(url, {
-          dispatcher: agent,
-          headers: {
-            "User-Agent": "OutpostBot/1.0 (verification flow)",
-            "Accept": "application/json",
-          },
-        });
+    if (!result.ok) return null;
 
-        if (res.status === 404) return { ok: false, notFound: true };
-        if (!res.ok) continue; // blocked or rate-limited — try next URL
+    const body = result.body;
+    if (body?.kind === "t2" && body?.data?.name === undefined) return null;
 
-        let body: any;
-        try { body = await res.json(); } catch { continue; }
+    // 404-style: user not found
+    if (body?.error === 404 || body?.message === "Not Found") return { ok: false, notFound: true };
 
-        const d = body?.data ?? {};
-        if (!d.name) continue;
-        if (d.is_suspended || d.is_banned) return { ok: false, notFound: true, suspended: true };
+    const d = body?.data ?? {};
+    if (!d.name) return null;
+    if (d.is_suspended || d.is_banned) return { ok: false, notFound: true, suspended: true };
 
-        const createdUtc: number = typeof d.created_utc === "number" ? d.created_utc : 0;
-        const ageDays = createdUtc ? Math.floor((Date.now() / 1000 - createdUtc) / 86400) : 0;
+    const createdUtc: number = typeof d.created_utc === "number" ? d.created_utc : 0;
+    const ageDays = createdUtc ? Math.floor((Date.now() / 1000 - createdUtc) / 86400) : 0;
 
-        logger.info({ name: d.name, url }, "Reddit profile via direct JSON endpoint (no auth)");
-        return {
-          ok: true,
-          profile: {
-            name: d.name as string,
-            createdUtc,
-            linkKarma:    (d.link_karma    as number) ?? 0,
-            commentKarma: (d.comment_karma as number) ?? 0,
-            totalKarma:   (d.total_karma   as number) ?? (((d.link_karma as number) ?? 0) + ((d.comment_karma as number) ?? 0)),
-            iconImg:      stripQuery(d.icon_img as string | undefined),
-            accountAgeDays: ageDays,
-            karmaVerified: true,
-          },
-        };
-      } catch (err) {
-        logger.debug({ err, url }, "fetchViaDirectJson: attempt failed");
-      }
-    }
+    logger.info({ name: d.name, via: result.via }, "Reddit profile via JSON endpoint (proxy-routed)");
+    return {
+      ok: true,
+      profile: {
+        name: d.name as string,
+        createdUtc,
+        linkKarma:    (d.link_karma    as number) ?? 0,
+        commentKarma: (d.comment_karma as number) ?? 0,
+        totalKarma:   (d.total_karma   as number) ?? (((d.link_karma as number) ?? 0) + ((d.comment_karma as number) ?? 0)),
+        iconImg:      stripQuery(d.icon_img as string | undefined),
+        accountAgeDays: ageDays,
+        karmaVerified: true,
+      },
+    };
   } catch (err) {
-    logger.debug({ err, name }, "fetchViaDirectJson: import failed");
+    logger.debug({ err, name }, "fetchViaDirectJson: all attempts failed");
   }
 
   return null;
