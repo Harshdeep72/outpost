@@ -30,7 +30,7 @@ async function fetchDirectText(url: string, timeoutMs = 8000): Promise<string | 
  *
  * Returns the resolved URL string, or null on failure.
  */
-async function resolveShareLink(shareUrl: string, timeoutMs = 5000): Promise<string | null> {
+export async function resolveShareLink(shareUrl: string, timeoutMs = 5000): Promise<string | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {

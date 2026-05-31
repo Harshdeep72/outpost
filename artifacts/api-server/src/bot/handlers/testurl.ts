@@ -3,6 +3,8 @@ import { makeEmbed, hasAdminRole, smokyFooterText } from "../util.js";
 import { COLORS } from "../constants.js";
 import { logger } from "../../lib/logger.js";
 
+const SHARE_LINK_RE = /reddit\.com\/r\/[^/]+\/s\/[A-Za-z0-9]+/i;
+
 export async function handleTestUrlCommand(interaction: ChatInputCommandInteraction) {
   const member = interaction.member;
   if (!member || typeof member === "string" || !("roles" in member)) {
@@ -18,7 +20,7 @@ export async function handleTestUrlCommand(interaction: ChatInputCommandInteract
     });
   }
 
-  const proofUrl = interaction.options.getString("url", true).trim();
+  const rawUrl = interaction.options.getString("url", true).trim();
   const redditUsername = interaction.options.getString("reddit_username")?.trim() ?? "";
 
   await interaction.deferReply({ flags: 64 });
@@ -26,7 +28,30 @@ export async function handleTestUrlCommand(interaction: ChatInputCommandInteract
   const start = Date.now();
 
   try {
-    const { parseRedditProofUrl } = await import("../reddit-validator.js");
+    const { parseRedditProofUrl, resolveShareLink, validateRedditProof } = await import("../reddit-validator.js");
+
+    // ── Resolve Reddit share links (reddit.com/r/sub/s/XXXX) ─────────────────
+    let proofUrl = rawUrl;
+    let resolvedFrom: string | null = null;
+    if (SHARE_LINK_RE.test(rawUrl)) {
+      const resolved = await resolveShareLink(rawUrl);
+      if (!resolved) {
+        return interaction.editReply({
+          embeds: [
+            makeEmbed(COLORS.DANGER)
+              .setTitle("🔗 Test URL — Share Link Failed")
+              .setDescription(
+                `Could not resolve the Reddit share link:\n\`${rawUrl}\`\n\n` +
+                `Reddit may have rejected the redirect request. Try pasting the full comment URL instead.`
+              ),
+          ],
+        });
+      }
+      resolvedFrom = rawUrl;
+      proofUrl = resolved;
+    }
+
+    // ── Parse the (possibly resolved) URL ────────────────────────────────────
     const parsed = parseRedditProofUrl(proofUrl);
 
     if (!parsed) {
@@ -34,33 +59,45 @@ export async function handleTestUrlCommand(interaction: ChatInputCommandInteract
         embeds: [
           makeEmbed(COLORS.DANGER)
             .setTitle("🔗 Test URL — Invalid")
-            .setDescription(`Could not parse \`${proofUrl}\` as a Reddit proof URL.\n\nExpected formats:\n• \`reddit.com/r/sub/comments/postId\`\n• \`reddit.com/r/sub/comments/postId/comment/commentId\``),
+            .setDescription(
+              `Could not parse \`${proofUrl}\` as a Reddit proof URL.\n\n` +
+              `Expected formats:\n` +
+              `• \`reddit.com/r/sub/comments/postId\`\n` +
+              `• \`reddit.com/r/sub/comments/postId/comment/commentId\`\n` +
+              `• \`reddit.com/r/sub/s/ShareCode\` (share link — auto-resolved)`
+            ),
         ],
       });
     }
 
-    let result: any;
-    if (parsed.commentId) {
-      const { deepCheckComment } = await import("../deepRedditCommentChecker.js");
-      result = await deepCheckComment(proofUrl, redditUsername ? [redditUsername] : [], "");
-    } else {
-      const { validateRedditProof } = await import("../reddit-validator.js");
-      result = await validateRedditProof(proofUrl, redditUsername ? [redditUsername] : [], "");
-    }
+    // ── Validate ──────────────────────────────────────────────────────────────
+    // validateRedditProof handles both comments and posts internally.
+    const result = await validateRedditProof(
+      proofUrl,
+      redditUsername ? [redditUsername] : [],
+      ""
+    );
 
     const elapsed = Date.now() - start;
 
     const passed: boolean = result.passed;
     const color = passed ? COLORS.SUCCESS : result.status === "api_unreachable" ? COLORS.WARNING : COLORS.DANGER;
-
     const statusLine = `${result.statusEmoji ?? (passed ? "✅" : "❌")} **${result.statusLabel ?? result.status}**`;
 
-    const fields: { name: string; value: string; inline?: boolean }[] = [
-      { name: "🔗 URL", value: `\`${proofUrl}\``, inline: false },
+    const fields: { name: string; value: string; inline?: boolean }[] = [];
+
+    if (resolvedFrom) {
+      fields.push({ name: "🔗 Share Link", value: `\`${resolvedFrom}\``, inline: false });
+      fields.push({ name: "🔗 Resolved URL", value: `\`${proofUrl}\``, inline: false });
+    } else {
+      fields.push({ name: "🔗 URL", value: `\`${proofUrl}\``, inline: false });
+    }
+
+    fields.push(
       { name: "📊 Result", value: statusLine, inline: true },
       { name: "⏱️ Time", value: `${elapsed}ms`, inline: true },
       { name: "📂 Type", value: parsed.commentId ? "Comment" : "Post", inline: true },
-    ];
+    );
 
     if (parsed.subreddit) {
       fields.push({ name: "📌 Subreddit (URL)", value: `r/${parsed.subreddit}`, inline: true });
@@ -94,7 +131,6 @@ export async function handleTestUrlCommand(interaction: ChatInputCommandInteract
     const failureText = result.failures?.length
       ? result.failures.map((f: string) => `• ${f}`).join("\n")
       : null;
-
     if (failureText) {
       fields.push({ name: "⚠️ Failures", value: failureText.slice(0, 1024), inline: false });
     }
@@ -104,18 +140,18 @@ export async function handleTestUrlCommand(interaction: ChatInputCommandInteract
       .addFields(fields)
       .setFooter({ text: smokyFooterText(`Checked ${new Date().toUTCString()}`) });
 
-    logger.info({ proofUrl, status: result.status, elapsed }, "testurl command result");
+    logger.info({ rawUrl, proofUrl, status: result.status, elapsed }, "testurl command result");
 
     return interaction.editReply({ embeds: [embed] });
   } catch (err) {
-    logger.error({ err, proofUrl }, "testurl command threw");
+    logger.error({ err, rawUrl }, "testurl command threw");
     const elapsed = Date.now() - start;
     return interaction.editReply({
       embeds: [
         makeEmbed(COLORS.DANGER)
           .setTitle("🧪 Test URL — Error")
           .addFields(
-            { name: "🔗 URL", value: `\`${proofUrl}\`` },
+            { name: "🔗 URL", value: `\`${rawUrl}\`` },
             { name: "❌ Error", value: String(err) },
             { name: "⏱️ Time", value: `${elapsed}ms`, inline: true },
           ),
