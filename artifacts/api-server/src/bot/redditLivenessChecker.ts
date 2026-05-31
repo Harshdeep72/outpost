@@ -252,7 +252,55 @@ async function tick(client: Client) {
       // funds move to available (which by definition hasn't happened yet for
       // the rows this checker selects). This keeps "Lifetime Earnings"
       // monotonically non-decreasing.
+      //
+      // ── False-positive guard ──────────────────────────────────────────────
+      // Before clawing back money, wait 45 s then run one confirmation check.
+      // A single bad proxy response, CAPTCHA interception, or transient Reddit
+      // error must never trigger an irreversible financial action. We only
+      // proceed if the second independent check agrees with the first.
       if ((newStatus === "removed" || newStatus === "deleted") && oldStatus === "live") {
+        logger.info(
+          { submissionId: row.id, newStatus },
+          "Reddit liveness: potential reversal — waiting 45s for confirmation check"
+        );
+        await new Promise((r) => setTimeout(r, 45_000));
+        const confirm = await recheckRedditLiveness(row.proof_link);
+        if (confirm.liveStatus !== newStatus) {
+          logger.warn(
+            {
+              submissionId: row.id,
+              firstStatus: newStatus,
+              confirmStatus: confirm.liveStatus,
+            },
+            "Reddit liveness: payout reversal ABORTED — confirmation check disagrees with first observation (likely transient false positive)"
+          );
+          // Update status to the confirmed result (or keep live if inconclusive).
+          const safeStatus: typeof newStatus =
+            confirm.liveStatus === "removed" || confirm.liveStatus === "deleted"
+              ? confirm.liveStatus
+              : newStatus; // keep newStatus only if confirm says same removal type
+          // If confirmation says live or unknown, revert the DB status update too.
+          if (confirm.liveStatus === "live" || confirm.liveStatus === "unknown") {
+            await db.execute(
+              sql`UPDATE submissions
+                  SET live_status = ${oldStatus},
+                      last_checked_at = now(),
+                      removal_reason = NULL
+                  WHERE id = ${parseInt(row.id)}`
+            );
+            logger.info({ submissionId: row.id, revertedTo: oldStatus }, "Reddit liveness: reverted status after false-positive detection");
+            await new Promise((r) => setTimeout(r, 250));
+            continue;
+          }
+          // Both removal types differ (removed vs deleted) — use confirmation result.
+          await db.execute(
+            sql`UPDATE submissions
+                SET live_status = ${safeStatus},
+                    last_checked_at = now(),
+                    removal_reason = ${confirm.reason ?? null}
+                WHERE id = ${parseInt(row.id)}`
+          );
+        }
         const reward = parseFloat(row.reward);
         await db.execute(
           sql`UPDATE users

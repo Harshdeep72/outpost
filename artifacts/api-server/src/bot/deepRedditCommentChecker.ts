@@ -106,8 +106,11 @@ export function parseHtmlComment(html: string, commentId: string): ParsedHtmlCom
       }
     }
     
+    // Note: we deliberately exclude `!author` here. A missing data-author
+    // attribute means we couldn't parse the author — it does NOT mean the
+    // comment was removed. Treating it as removed caused false positives where
+    // live comments with un-parseable author attributes triggered payout reversals.
     const isRemoved = isCollapsed ||
-      !author ||
       author === "[deleted]" ||
       author === "[removed]" ||
       /\[\s*removed\s*\]/i.test(body ?? "") ||
@@ -311,10 +314,14 @@ async function runDeepCheck(
   let createdAt: string | null = null;
   let bodyText: string | null = null;
   let commentStatus: SubmissionStatus = "live";
+  // Track whether the JSON fetch itself succeeded so HTML-only "not found"
+  // results can be treated as inconclusive rather than confirmed-removed.
+  let jsonSucceeded = false;
 
   // 1. Evaluate JSON result (if successful)
   if (jsonRes && jsonRes.ok) {
     logger.info({ commentId: parsed.commentId }, "Deep check: JSON fetch succeeded");
+    jsonSucceeded = true;
     const data = jsonRes.body;
     const postListing = Array.isArray(data) ? data[0] : null;
     const postData = postListing?.data?.children?.[0]?.data;
@@ -371,12 +378,29 @@ async function runDeepCheck(
           authorFound = parsedHtml.author ?? (expectedLowerList.length === 0 ? "__live__" : null);
         }
       } else {
-        // Comment not found on a valid Reddit page → deleted/removed.
+        // Comment not found on a valid Reddit page.
+        //
+        // In liveness-only mode (expectedLowerList empty), only commit to a
+        // removal verdict when JSON also confirmed the comment is gone. If
+        // JSON was unavailable (403/blocked), we have a single source saying
+        // "not found" which could be a bad proxy page — treat as inconclusive
+        // to avoid reversing a payout on a live comment.
+        if (expectedLowerList.length === 0 && !jsonSucceeded) {
+          logger.warn(
+            { commentId: parsed.commentId },
+            "Deep check: HTML says not found but JSON was unavailable — treating as inconclusive (liveness mode)"
+          );
+          return {
+            passed: false,
+            autoApproved: false,
+            status: "api_unreachable",
+            failures: ["Comment not found in HTML verification but Reddit JSON API was unavailable — treating as inconclusive."],
+            subredditFound: subredditFound ?? parsed.subreddit,
+            postLive: true,
+            ...meta("api_unreachable"),
+          };
+        }
         commentStatus = "comment_deleted";
-        // Use a sentinel author so we reach the liveness-check return path
-        // rather than comment_missing. Author check is skipped when the list
-        // is empty (liveness mode); for initial submission the expectedAuthor
-        // list is non-empty so the author check below will catch mismatches.
         authorFound = Array.isArray(expectedAuthor) ? expectedAuthor[0] : expectedAuthor;
         if (!authorFound) authorFound = "__deleted__";
       }
