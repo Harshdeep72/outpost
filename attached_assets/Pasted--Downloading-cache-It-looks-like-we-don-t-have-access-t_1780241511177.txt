@@ -1,0 +1,97 @@
+==> Downloading cache...
+==> It looks like we don't have access to your repo, but we'll try to clone it anyway.
+==> Cloning from https://github.com/Harshdeep72/outpost
+==> Checking out commit d85ae3c61a5b3e6f4d8a098181d59e3d1a29169b in branch main
+==> Downloaded 176MB in 4s. Extraction took 4s.
+==> Requesting Node.js version >=20
+==> Using Node.js version 26.2.0 via /opt/render/project/src/package.json
+==> Docs on specifying a Node.js version: https://render.com/docs/node-version
+==> Installing Node.js version 26.2.0...
+==> Running build command 'npx --yes pnpm@9.15.0 install --frozen-lockfile=false --prod=false && npx --yes pnpm@9.15.0 --filter @workspace/dashboard run build && npx --yes pnpm@9.15.0 --filter @workspace/api-server run build'...
+Scope: all 9 workspace projects
+. preinstall$ echo 'Installing workspace dependencies with pnpm...'
+. preinstall: Installing workspace dependencies with pnpm...
+. preinstall: Done
+devDependencies:
++ prettier 3.8.1 (3.8.3 is available)
++ typescript 5.9.3 (6.0.3 is available)
+Done in 5.4s
+> @workspace/dashboard@0.0.0 build /opt/render/project/src/artifacts/dashboard
+> vite build --config vite.config.ts
+vite v7.3.2 building client environment for production...
+(node:125) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+transforming...
+✓ 116 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/public/index.html                   0.74 kB │ gzip:   0.42 kB
+dist/public/assets/index-BMsAqEJW.css  133.44 kB │ gzip:  20.68 kB
+dist/public/assets/index-C19XGk2D.js   489.36 kB │ gzip: 129.06 kB
+✓ built in 1.59s
+> @workspace/api-server@0.0.0 build /opt/render/project/src/artifacts/api-server
+> node ./build.mjs
+  dist/index.mjs                       6.6mb ⚠️
+  dist/pino-worker.mjs               153.4kb
+  dist/pino-file.mjs                 142.1kb
+  dist/pino-pretty.mjs               114.6kb
+  dist/thread-stream-worker.mjs        7.3kb
+  dist/index.mjs.map                  11.1mb
+  dist/pino-worker.mjs.map           256.9kb
+  dist/pino-file.mjs.map             229.0kb
+  dist/pino-pretty.mjs.map           203.9kb
+  dist/thread-stream-worker.mjs.map   12.0kb
+⚡ Done in 1062ms
+==> Uploading build...
+==> Uploaded in 6.1s. Compression took 5.2s
+==> Build successful 🎉
+==> Deploying...
+==> Setting WEB_CONCURRENCY=1 by default, based on available CPUs in the instance
+==> Running 'npx --yes pnpm@9.15.0 --filter @workspace/api-server run start:prod'
+> @workspace/api-server@0.0.0 start:prod /opt/render/project/src/artifacts/api-server
+> NODE_ENV=production node ./dist/index.mjs
+{"level":30,"time":1780241477880,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","dashboardDistPath":"/opt/render/project/src/artifacts/dashboard/dist/public","msg":"Serving dashboard SPA from API server"}
+(node:97) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"level":30,"time":1780241477980,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","port":10000,"msg":"Server listening"}
+{"level":30,"time":1780241478982,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","req":{"id":1,"method":"HEAD","url":"/"},"res":{"statusCode":404},"responseTime":101,"msg":"request completed"}
+{"level":30,"time":1780241479094,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","msg":"Database probe successful"}
+{"level":30,"time":1780241479188,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","msg":"Seeded founder/admin accounts (smurf_xz=dev, jishan/jishand/damy=admin)"}
+{"level":30,"time":1780241479648,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","msg":"Schema bootstrap complete (CREATE TABLE IF NOT EXISTS)"}
+{"level":40,"time":1780241479686,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","err":{"type":"TypeError","message":"Invalid URL","stack":"TypeError: Invalid URL\n    at new URL (node:internal/url:840:25)\n    at #getUrl (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:130454:18)\n    at new ProxyAgent2 (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:130326:33)\n    at loadProxies (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:145005:21)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)","code":"ERR_INVALID_URL","input":"http://92.112.162.37:8215:apmmghgt:no09gdnd9z8n:173.214.176.185"},"index":100,"host":"unknown","msg":"Skipping invalid proxy entry"}
+{"level":40,"time":1780241479686,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","err":{"type":"TypeError","message":"Invalid URL","stack":"TypeError: Invalid URL\n    at new URL (node:internal/url:840:25)\n    at #getUrl (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:130454:18)\n    at new ProxyAgent2 (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:130326:33)\n    at loadProxies (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:145005:21)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)","code":"ERR_INVALID_URL","input":"http://195.40.121.55:5238:apmmghgt:no09gdnd9z8n:89.116.78.214"},"index":101,"host":"unknown","msg":"Skipping invalid proxy entry"}
+{"level":40,"time":1780241479686,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","err":{"type":"TypeError","message":"Invalid URL","stack":"TypeError: Invalid URL\n    at new URL (node:internal/url:840:25)\n    at #getUrl (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:130454:18)\n    at new ProxyAgent2 (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:130326:33)\n    at loadProxies (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:145005:21)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)","code":"ERR_INVALID_URL","input":"http://166.88.149.78:6542:apmmghgt:no09gdnd9z8n:142.111.113.172"},"index":102,"host":"unknown","msg":"Skipping invalid proxy entry"}
+{"level":40,"time":1780241479687,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","err":{"type":"TypeError","message":"Invalid URL","stack":"TypeError: Invalid URL\n    at new URL (node:internal/url:840:25)\n    at #getUrl (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:130454:18)\n    at new ProxyAgent2 (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:130326:33)\n    at loadProxies (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:145005:21)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)","code":"ERR_INVALID_URL","input":"http://161.123.208.75:6319:apmmghgt:no09gdnd9z8n:45.115.194.134"},"index":103,"host":"unknown","msg":"Skipping invalid proxy entry"}
+{"level":40,"time":1780241479687,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","err":{"type":"TypeError","message":"Invalid URL","stack":"TypeError: Invalid URL\n    at new URL (node:internal/url:840:25)\n    at #getUrl (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:130454:18)\n    at new ProxyAgent2 (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:130326:33)\n    at loadProxies (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:145005:21)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)","code":"ERR_INVALID_URL","input":"http://184.174.25.98:5987:apmmghgt:no09gdnd9z8n:46.203.210.124"},"index":104,"host":"unknown","msg":"Skipping invalid proxy entry"}
+{"level":40,"time":1780241479687,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","err":{"type":"TypeError","message":"Invalid URL","stack":"TypeError: Invalid URL\n    at new URL (node:internal/url:840:25)\n    at #getUrl (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:130454:18)\n    at new ProxyAgent2 (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:130326:33)\n    at loadProxies (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:145005:21)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)","code":"ERR_INVALID_URL","input":"http://82.22.253.139:7997:apmmghgt:no09gdnd9z8n:142.202.254.45"},"index":105,"host":"unknown","msg":"Skipping invalid proxy entry"}
+{"level":40,"time":1780241479687,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","err":{"type":"TypeError","message":"Invalid URL","stack":"TypeError: Invalid URL\n    at new URL (node:internal/url:840:25)\n    at #getUrl (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:130454:18)\n    at new ProxyAgent2 (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:130326:33)\n    at loadProxies (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:145005:21)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)","code":"ERR_INVALID_URL","input":"http://140.99.191.210:8087:apmmghgt:no09gdnd9z8n:82.23.225.177"},"index":106,"host":"unknown","msg":"Skipping invalid proxy entry"}
+{"level":40,"time":1780241479771,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","err":{"type":"TypeError","message":"Invalid URL","stack":"TypeError: Invalid URL\n    at new URL (node:internal/url:840:25)\n    at #getUrl (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:130454:18)\n    at new ProxyAgent2 (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:130326:33)\n    at loadProxies (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:145005:21)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)","code":"ERR_INVALID_URL","input":"http://38.154.191.234:8811:apmmghgt:no09gdnd9z8n:82.21.248.186"},"index":107,"host":"unknown","msg":"Skipping invalid proxy entry"}
+{"level":40,"time":1780241479772,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","err":{"type":"TypeError","message":"Invalid URL","stack":"TypeError: Invalid URL\n    at new URL (node:internal/url:840:25)\n    at #getUrl (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:130454:18)\n    at new ProxyAgent2 (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:130326:33)\n    at loadProxies (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:145005:21)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)","code":"ERR_INVALID_URL","input":"http://161.123.214.93:6448:apmmghgt:no09gdnd9z8n:23.26.154.175"},"index":108,"host":"unknown","msg":"Skipping invalid proxy entry"}
+{"level":40,"time":1780241479772,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","err":{"type":"TypeError","message":"Invalid URL","stack":"TypeError: Invalid URL\n    at new URL (node:internal/url:840:25)\n    at #getUrl (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:130454:18)\n    at new ProxyAgent2 (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:130326:33)\n    at loadProxies (file:///opt/render/project/src/artifacts/api-server/dist/index.mjs:145005:21)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)","code":"ERR_INVALID_URL","input":"http://103.114.58.163:6584:apmmghgt:no09gdnd9z8n:172.120.101.149"},"index":109,"host":"unknown","msg":"Skipping invalid proxy entry"}
+{"level":30,"time":1780241479772,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","count":100,"source":"db","msg":"Proxy list reloaded"}
+{"level":30,"time":1780241480277,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","tag":"Outpost#9955","proxies":100,"msg":"Discord bot ready (v2 Flash Edition)"}
+{"level":30,"time":1780241480374,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","count":34,"msg":"Registering slash commands (guild scope)"}
+(node:97) DeprecationWarning: The ready event has been renamed to clientReady to distinguish it from the gateway READY event and will only emit under that name in v15. Please use clientReady instead.
+{"level":30,"time":1780241480531,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","msg":"Slash commands registered (guild scope)"}
+{"level":30,"time":1780241480531,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","count":10,"msg":"Registering DM-safe slash commands (global scope)"}
+{"level":30,"time":1780241480659,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","msg":"DM-safe slash commands registered (global scope)"}
+{"level":30,"time":1780241480659,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","msg":"Daily digest scheduler started"}
+{"level":30,"time":1780241480659,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","msg":"Auto-bumper scheduler started"}
+{"level":30,"time":1780241480659,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","msg":"Unclaimed-task notifier scheduler started"}
+{"level":30,"time":1780241480660,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","tickMs":43200000,"recheckMs":43200000,"msg":"Reddit liveness checker started"}
+{"level":30,"time":1780241480660,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","tickMs":1800000,"autoDecideAfterMs":86400000,"stopAfterMs":604800000,"msg":"Pending-review sweeper started (24h auto-decide)"}
+{"level":30,"time":1780241480660,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","tickMs":30000,"msg":"Campaign drip-feed queue processor started"}
+{"level":30,"time":1780241480660,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","retentionDays":22,"batchLimit":200,"msg":"Submission retention cleaner started (daily, kill-switched on no-destination)"}
+{"level":30,"time":1780241483038,"pid":97,"hostname":"srv-d8e1fhek1jcs739gn0fg-hibernate-7db46bf5d7-p9ttt","count":4,"latest":"1.3.0","msg":"Update notifier: changelog loaded"}
+==> Your service is live 🎉
+==> 
+==> ///////////////////////////////////////////////////////////
+==> 
+==> Available at your primary URL https://outpost-api-e6tl.onrender.com
+==> 
+==> ///////////////////////////////////////////////////////////
