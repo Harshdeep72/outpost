@@ -1017,3 +1017,134 @@ export function renderPayoutWeeklyCard(d: PayoutWeeklyCardData): Buffer {
 
   return canvas.toBuffer("image/png");
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reddit Verification Review Card
+// Shown in the verification-log channel when karma cannot be fetched
+// automatically. Gives mods all the data in one glance.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface VerificationReviewCardData {
+  discordUsername: string;
+  redditUsername: string;
+  accountAgeDays: number;
+  minAgeDays: number;
+  minKarma: number;
+  /** Oldest confirmed activity date (Unix seconds), 0 if unknown. */
+  oldestActivityUtc: number;
+}
+
+const VW = 900;
+const VH = 420;
+
+export function renderVerificationReviewCard(d: VerificationReviewCardData): Buffer {
+  const canvas = createCanvas(VW, VH);
+  const ctx = canvas.getContext("2d");
+
+  // Background
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0, 0, VW, VH);
+
+  // Top strip
+  ctx.save();
+  ctx.font = "12px monospace";
+  ctx.fillStyle = C.muted;
+  ctx.fillText("outpost › verification › manual review", 30, 38);
+  ctx.font = "bold 11px monospace";
+  ctx.fillStyle = "#fbbf24"; // amber
+  ctx.textAlign = "right";
+  ctx.fillText("● PENDING MOD ACTION", VW - 30, 38);
+  ctx.textAlign = "start";
+  ctx.strokeStyle = C.border;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, 52);
+  ctx.lineTo(VW, 52);
+  ctx.stroke();
+  ctx.restore();
+
+  // Header
+  drawText(ctx, "Reddit Verification Request", 30, 90, {
+    font: "bold 22px sans-serif", color: C.text,
+  });
+  drawText(ctx, `${d.discordUsername}  wants to link  u/${d.redditUsername}`, 30, 115, {
+    font: "13px sans-serif", color: C.muted, maxWidth: 830,
+  });
+
+  // Amber accent bar under header
+  ctx.fillStyle = "#fbbf24";
+  ctx.fillRect(30, 128, 840, 2);
+
+  // ── Account Age card (left) ──────────────────────────────────────────────
+  const ageOk = d.accountAgeDays >= d.minAgeDays;
+  drawCard(ctx, 30, 148, 260, 130, 10);
+
+  drawText(ctx, "ACCOUNT AGE", 50, 174, { font: "10px monospace", color: C.muted });
+  drawText(ctx, `${d.accountAgeDays}d`, 50, 230, {
+    font: `bold 44px sans-serif`, color: ageOk ? C.good : C.danger,
+  });
+  drawText(ctx, ageOk ? `✓ ≥ ${d.minAgeDays}d required` : `✗ < ${d.minAgeDays}d required`, 50, 258, {
+    font: "12px monospace", color: ageOk ? C.good : C.danger,
+  });
+
+  // ── Karma card (middle) ──────────────────────────────────────────────────
+  drawCard(ctx, 310, 148, 260, 130, 10);
+  ctx.save();
+  ctx.strokeStyle = "#fbbf24";
+  ctx.lineWidth = 1.5;
+  roundedRect(ctx, 310, 148, 260, 130, 10);
+  ctx.stroke();
+  ctx.restore();
+
+  drawText(ctx, "KARMA", 330, 174, { font: "10px monospace", color: C.muted });
+  drawText(ctx, "?", 330, 232, { font: "bold 52px sans-serif", color: "#fbbf24" });
+  drawText(ctx, `Check manually  ≥ ${d.minKarma} required`, 330, 258, {
+    font: "11px monospace", color: "#fbbf24", maxWidth: 230,
+  });
+
+  // ── Oldest Activity card (right) ────────────────────────────────────────
+  drawCard(ctx, 590, 148, 280, 130, 10);
+  drawText(ctx, "OLDEST ACTIVITY", 610, 174, { font: "10px monospace", color: C.muted });
+
+  if (d.oldestActivityUtc > 0) {
+    const date = new Date(d.oldestActivityUtc * 1000);
+    const dateStr = date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    drawText(ctx, dateStr, 610, 224, { font: "bold 20px sans-serif", color: C.accentStrong, maxWidth: 240 });
+    drawText(ctx, `Account active for ≥ ${d.accountAgeDays} days`, 610, 250, {
+      font: "11px monospace", color: C.muted, maxWidth: 240,
+    });
+  } else {
+    drawText(ctx, "Unknown", 610, 224, { font: "bold 20px sans-serif", color: C.muted });
+  }
+
+  // ── Bottom instruction bar ────────────────────────────────────────────────
+  ctx.save();
+  roundedRect(ctx, 30, 300, 840, 84, 10);
+  ctx.fillStyle = "rgba(251, 191, 36, 0.07)";
+  ctx.fill();
+  ctx.strokeStyle = "#fbbf24";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.restore();
+
+  drawText(ctx, "▶  OPEN PROFILE TO CHECK KARMA", 50, 330, {
+    font: "bold 13px monospace", color: "#fbbf24",
+  });
+  const link = `old.reddit.com/user/${d.redditUsername}`;
+  drawText(ctx, link, 50, 356, {
+    font: "15px monospace", color: C.accentStrong, maxWidth: 820,
+  });
+  drawText(ctx, "Look at the sidebar for Post Karma + Comment Karma, then click ✅ Accept or ❌ Reject above.", 50, 375, {
+    font: "11px sans-serif", color: C.muted, maxWidth: 820,
+  });
+
+  // Footer
+  drawText(ctx, new Date().toUTCString(), 30, VH - 14, {
+    font: "10px monospace", color: C.muted,
+  });
+  drawText(ctx, "OUTPOST BOT", VW - 30, VH - 14, {
+    font: "bold 10px monospace", color: C.muted, align: "right",
+  });
+
+  return canvas.toBuffer("image/png");
+}

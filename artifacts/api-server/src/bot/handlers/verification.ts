@@ -4,6 +4,7 @@ import {
   type ModalSubmitInteraction,
   type Guild,
   ActionRowBuilder,
+  AttachmentBuilder,
   ButtonBuilder,
   ButtonStyle,
   ModalBuilder,
@@ -21,6 +22,7 @@ import { upsertUser, getUserByDiscordId } from "../db.js";
 import { invalidateUser } from "../cache.js";
 import { markReferralVerified } from "./referral.js";
 import { makeEmbed, formatMoney, hasAdminRole, hasModRole } from "../util.js";
+import { renderVerificationReviewCard } from "../card-renderer.js";
 import { COLORS } from "../constants.js";
 import { logger } from "../../lib/logger.js";
 import { getMaxRedditAccounts } from "../../lib/settings.js";
@@ -29,6 +31,33 @@ const MIN_KARMA = 100;
 const MIN_AGE_DAYS = 30;
 // Default — overridden at runtime by the DB setting (Settings → Max Reddit accounts).
 const DEFAULT_MAX_REDDIT_ACCOUNTS = 3;
+
+/**
+ * Render a verification review card using the canvas renderer.
+ * Shows account age (confirmed/failed), karma check instructions, and
+ * a direct link to old.reddit.com so mods can verify karma at a glance.
+ * Never throws — returns null on failure so the caller degrades gracefully.
+ */
+function buildReviewCard(
+  discordUsername: string,
+  redditUsername: string,
+  accountAgeDays: number,
+  oldestActivityUtc: number,
+): Buffer | null {
+  try {
+    return renderVerificationReviewCard({
+      discordUsername,
+      redditUsername,
+      accountAgeDays,
+      minAgeDays: MIN_AGE_DAYS,
+      minKarma: MIN_KARMA,
+      oldestActivityUtc,
+    });
+  } catch (err) {
+    logger.warn({ err, redditUsername }, "buildReviewCard: render failed");
+    return null;
+  }
+}
 
 async function countRedditAccounts(discordId: string): Promise<number> {
   const r = await db.execute<{ count: string }>(
@@ -271,22 +300,29 @@ async function handleVerifyModalInner(interaction: ModalSubmitInteraction) {
     // know if they meet the ≥100 karma requirement. Queue for manual review
     // rather than blindly auto-verifying a potentially low-karma account.
     if (!p.karmaVerified) {
+      // Render a review card image so mods see all the info at a glance.
+      const cardBuf = buildReviewCard(discordUsername, p.name, p.accountAgeDays, p.createdUtc);
+      const cardFile = cardBuf
+        ? new AttachmentBuilder(cardBuf, { name: `verify-${p.name}.png` })
+        : null;
+
       const networkEmbed = makeEmbed(COLORS.WARNING)
-        .setTitle("Verification Request — Karma Unverifiable")
+        .setTitle("📋 Verification Request — Manual Karma Check Required")
         .setDescription(
-          `⚠️ Reddit's JSON API is blocked — karma could not be fetched.\n\n` +
-          `Account **[u/${p.name}](https://reddit.com/user/${p.name})** exists and is ~${p.accountAgeDays} days old.\n\n` +
-          `A mod must manually verify karma ≥ ${MIN_KARMA} before approving.`
+          `Reddit's karma API is blocked — karma could not be fetched automatically.\n\n` +
+          `**[u/${p.name}](https://old.reddit.com/user/${p.name})** — ${p.accountAgeDays} days old account.\n\n` +
+          `Open **[their profile](https://old.reddit.com/user/${p.name})** to check karma, then click Accept or Reject.`
         )
         .addFields(
           { name: "Discord User", value: `<@${discordId}> (${discordUsername})`, inline: true },
-          { name: "Reddit Profile", value: `[u/${p.name}](https://reddit.com/user/${p.name})`, inline: true },
+          { name: "Reddit Profile", value: `[u/${p.name}](https://old.reddit.com/user/${p.name})`, inline: true },
           { name: "Account Age", value: `${p.accountAgeDays} days`, inline: true },
-          { name: "Post Karma", value: "N/A (API blocked)", inline: true },
-          { name: "Comment Karma", value: "N/A (API blocked)", inline: true },
-          { name: "Total Karma", value: "N/A (API blocked)", inline: true },
         )
-        .setFooter({ text: "Check karma on reddit.com/user/" + p.name + " before accepting" });
+        .setFooter({ text: `Requires ≥${MIN_KARMA} karma  ·  ≥${MIN_AGE_DAYS} days old` });
+
+      if (cardFile) {
+        networkEmbed.setImage(`attachment://verify-${p.name}.png`);
+      }
 
       // Don't write redditUsername to users here — that would create a
       // phantom link that blocks the user from retrying if the mod rejects.
@@ -296,22 +332,26 @@ async function handleVerifyModalInner(interaction: ModalSubmitInteraction) {
       const manualRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
           .setCustomId(`verify:accept:${discordId}:${nameLower}`)
-          .setLabel("Accept (karma OK)")
+          .setLabel("✅ Accept (karma OK)")
           .setStyle(ButtonStyle.Success),
         new ButtonBuilder()
           .setCustomId(`verify:reject:${discordId}`)
-          .setLabel("Reject")
+          .setLabel("❌ Reject")
           .setStyle(ButtonStyle.Danger),
       );
 
-      await verificationLogChannel.send({ embeds: [networkEmbed], components: [manualRow] });
+      await verificationLogChannel.send({
+        embeds: [networkEmbed],
+        components: [manualRow],
+        ...(cardFile ? { files: [cardFile] } : {}),
+      });
       await interaction.editReply({
         embeds: [makeEmbed(COLORS.WARNING).setDescription(
           `⏳ Reddit's karma API is temporarily blocked. A moderator will check your karma and verify you shortly.\n\n` +
           `Your account **u/${p.name}** (${p.accountAgeDays} days old) has been submitted for review.`
         )],
       });
-      logger.info({ discordId, parsed, ageDays: p.accountAgeDays }, "Verification queued — karma unverifiable (RSS fallback)");
+      logger.info({ discordId, parsed, ageDays: p.accountAgeDays, hasCard: !!cardFile }, "Verification queued — karma unverifiable, review card attached");
       return;
     }
 
