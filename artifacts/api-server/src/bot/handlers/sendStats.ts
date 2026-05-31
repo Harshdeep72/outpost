@@ -3,7 +3,6 @@ import {
   type ButtonInteraction,
   type TextChannel,
   type Guild,
-  PermissionFlagsBits,
   ChannelType,
   AttachmentBuilder,
   ActionRowBuilder,
@@ -11,7 +10,7 @@ import {
   ButtonStyle,
 } from "discord.js";
 import { pool } from "@workspace/db";
-import { makeEmbed, formatMoney } from "../util.js";
+import { makeEmbed, formatMoney, hasModRole } from "../util.js";
 import { COLORS } from "../constants.js";
 import { logger } from "../../lib/logger.js";
 import {
@@ -308,24 +307,16 @@ function buildStatsEmbed(row: StatsRow, discordUserId: string) {
 }
 
 export async function handleSendStatsCommand(interaction: ChatInputCommandInteraction) {
-  // Same permission gate as /massdm — admins and mods only.
-  const perms = interaction.member?.permissions;
-  const hasPerm =
-    typeof perms === "object" && perms !== null && "has" in perms
-      ? (perms.has(PermissionFlagsBits.Administrator) || perms.has(PermissionFlagsBits.ManageMessages))
-      : false;
-  if (!hasPerm) {
-    return interaction.reply({ content: "❌ Only admins and mods can use this command.", flags: 64 });
+  const guild = interaction.guild;
+  if (!guild) {
+    return interaction.reply({ embeds: [makeEmbed(COLORS.DANGER).setDescription("❌ This command must be run inside the server.")], flags: 64 });
+  }
+  const member = interaction.member;
+  if (!member || typeof member === "string" || !("roles" in member) || !hasModRole(member as any, guild)) {
+    return interaction.reply({ embeds: [makeEmbed(COLORS.DANGER).setDescription("❌ Only Admins and Mods can use this command.")], flags: 64 });
   }
 
   await interaction.deferReply({ flags: 64 });
-
-  const guild = interaction.guild;
-  if (!guild) {
-    return interaction.editReply({
-      embeds: [makeEmbed(COLORS.DANGER).setDescription("❌ This command must be run inside the server.")],
-    });
-  }
 
   let targets: UserRow[];
   try {

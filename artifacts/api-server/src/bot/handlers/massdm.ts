@@ -6,9 +6,8 @@ import {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  PermissionFlagsBits,
 } from "discord.js";
-import { makeEmbed, hasVerifiedRole } from "../util.js";
+import { makeEmbed, hasVerifiedRole, hasModRole } from "../util.js";
 import { COLORS } from "../constants.js";
 import { logger } from "../../lib/logger.js";
 
@@ -33,16 +32,10 @@ function isValidTarget(t: string | null | undefined): t is "verified" | "unverif
 }
 
 export async function handleMassDmCommand(interaction: ChatInputCommandInteraction) {
-  // Use the cached member from the interaction itself (no fetch — keeps us within 3s)
+  const guild = interaction.guild!;
   const member = interaction.member;
-  const perms = member?.permissions;
-  const hasPerm =
-    typeof perms === "object" && perms !== null && "has" in perms
-      ? (perms.has(PermissionFlagsBits.Administrator) || perms.has(PermissionFlagsBits.ManageMessages))
-      : false;
-
-  if (!hasPerm) {
-    return interaction.reply({ content: "❌ Only admins and mods can use this command.", flags: 64 });
+  if (!member || typeof member === "string" || !("roles" in member) || !hasModRole(member as any, guild)) {
+    return interaction.reply({ embeds: [makeEmbed(COLORS.DANGER).setDescription("❌ Only Admins and Mods can use this command.")], flags: 64 });
   }
 
   // NEW: optional `user` option. When supplied we DM just that one user.

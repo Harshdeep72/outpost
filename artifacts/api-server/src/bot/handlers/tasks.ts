@@ -16,7 +16,7 @@ import { tasks, claims, submissions, users, trustLogs } from "@workspace/db";
 import { setupGuild, getOrCreateWorkspaceChannel } from "../setup.js";
 import { getUserByDiscordId, tryCompleteReferral, getTaskByIdCached, getClaimByIdCached, invalidateTask, invalidateClaim } from "../db.js";
 import { invalidateUser, invalidateLeaderboard } from "../cache.js";
-import { makeEmbed, formatMoney, hasVerifiedRole } from "../util.js";
+import { makeEmbed, formatMoney, hasVerifiedRole, hasModRole } from "../util.js";
 import { COLORS, TASK_COOLDOWN_MINUTES, CLAIM_TIMEOUT_MINUTES, MAX_CONCURRENT_CLAIMS, isTwitterTask, isQuoraTask, getPlatformLabel, TASK_PING_DELAY_MS, ANTI_FRAUD } from "../constants.js";
 import { getCooldownConfig } from "../../lib/settings.js";
 import { safeSyncEarnerRoles } from "../earnerRoles.js";
@@ -82,6 +82,12 @@ function buildTaskButtons(task: typeof tasks.$inferSelect): ActionRowBuilder<But
 }
 
 export async function handleCreateTaskCommand(interaction: ChatInputCommandInteraction) {
+  const guild = interaction.guild!;
+  const member = interaction.member;
+  if (!member || typeof member === "string" || !("roles" in member) || !hasModRole(member as any, guild)) {
+    return interaction.reply({ embeds: [makeEmbed(COLORS.DANGER).setDescription("❌ Only Admins and Mods can create tasks.")], flags: 64 });
+  }
+
   const type = interaction.options.getString("type", true);
   const reward = interaction.options.getNumber("reward", true);
   // /createtask is always single-slot now. Multi-slot drops go through /bulktask

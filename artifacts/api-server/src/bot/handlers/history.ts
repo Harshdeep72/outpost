@@ -3,13 +3,19 @@ import {
 } from "discord.js";
 import { sql } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { makeEmbed, formatMoney } from "../util.js";
+import { makeEmbed, formatMoney, hasModRole } from "../util.js";
 import { COLORS } from "../constants.js";
 
 const PAGE_SIZE = 8;
 
 export async function handleTaskHistoryCommand(interaction: ChatInputCommandInteraction) {
   await interaction.deferReply({ flags: 64 });
+
+  const guild = interaction.guild!;
+  const actingMember = await guild.members.fetch(interaction.user.id);
+  if (!hasModRole(actingMember, guild)) {
+    return interaction.editReply({ embeds: [makeEmbed(COLORS.DANGER).setDescription("❌ Only Admins and Mods can view task history.")] });
+  }
 
   const targetUser = interaction.options.getUser("user") ?? interaction.user;
   const discordId = targetUser.id;
@@ -90,6 +96,12 @@ export async function handleTaskHistoryCommand(interaction: ChatInputCommandInte
 export async function handlePayoutHistoryCommand(interaction: ChatInputCommandInteraction) {
   await interaction.deferReply({ flags: 64 });
 
+  const guild = interaction.guild!;
+  const actingMember = await guild.members.fetch(interaction.user.id);
+  if (!hasModRole(actingMember, guild)) {
+    return interaction.editReply({ embeds: [makeEmbed(COLORS.DANGER).setDescription("❌ Only Admins and Mods can view payout history.")] });
+  }
+
   const targetUser = interaction.options.getUser("user") ?? interaction.user;
   const discordId = targetUser.id;
 
@@ -152,6 +164,12 @@ export async function handlePayoutHistoryCommand(interaction: ChatInputCommandIn
 
 export async function handleAdminPayoutHistoryCommand(interaction: ChatInputCommandInteraction) {
   await interaction.deferReply({ flags: 64 });
+
+  const guild = interaction.guild!;
+  const actingMember = await guild.members.fetch(interaction.user.id);
+  if (!hasModRole(actingMember, guild)) {
+    return interaction.editReply({ embeds: [makeEmbed(COLORS.DANGER).setDescription("❌ Only Admins and Mods can view admin payout history.")] });
+  }
 
   const targetUser = interaction.options.getUser("user") ?? interaction.user;
   const discordId = targetUser.id;

@@ -7,7 +7,7 @@ import {
   ModalBuilder,
 } from "discord.js";
 import { setupGuild } from "../setup.js";
-import { makeEmbed } from "../util.js";
+import { makeEmbed, hasModRole } from "../util.js";
 import { COLORS } from "../constants.js";
 import { logger } from "../../lib/logger.js";
 import { createBulkTasksFromCsv, parseTaskCsv } from "../task-creation.js";
@@ -74,6 +74,12 @@ async function fetchSheetCsv(url: string): Promise<string> {
 }
 
 export async function handleBulkTaskCommand(interaction: ChatInputCommandInteraction) {
+  const guild = interaction.guild!;
+  const member = interaction.member;
+  if (!member || typeof member === "string" || !("roles" in member) || !hasModRole(member as any, guild)) {
+    return interaction.reply({ embeds: [makeEmbed(COLORS.DANGER).setDescription("❌ Only Admins and Mods can create bulk tasks.")], flags: 64 });
+  }
+
   const sheetsUrl = interaction.options.getString("sheets_url");
   const intervalMinutes = interaction.options.getInteger("interval_minutes") ?? 0;
   const maxClaimsPerUser = interaction.options.getInteger("max_claims_per_user") ?? 1;

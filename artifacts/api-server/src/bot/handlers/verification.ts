@@ -58,6 +58,12 @@ export async function handleVerifyCommand(interaction: ChatInputCommandInteracti
   // Admin/mod posts a PUBLIC verification panel that any member can click.
   // Each click runs an ephemeral verify flow for the clicker — admin's panel
   // stays visible to the whole channel.
+  const guild = interaction.guild!;
+  const member = interaction.member;
+  if (!member || typeof member === "string" || !("roles" in member) || !hasModRole(member as any, guild)) {
+    return interaction.reply({ embeds: [makeEmbed(COLORS.DANGER).setDescription("❌ Only Admins and Mods can post the verification panel.")], flags: 64 });
+  }
+
   await interaction.deferReply();
 
   const embed = makeEmbed(COLORS.PRIMARY)

@@ -2,7 +2,6 @@ import {
   type ChatInputCommandInteraction,
   type TextChannel,
   ChannelType,
-  PermissionFlagsBits,
 } from "discord.js";
 import { eq, sql } from "drizzle-orm";
 import { db, pool } from "@workspace/db";
@@ -10,7 +9,7 @@ import { users, trustLogs } from "@workspace/db";
 import { setupGuild, invalidateSetupCache } from "../setup.js";
 import { upsertUser, getUserByDiscordId } from "../db.js";
 import { invalidateUser } from "../cache.js";
-import { makeEmbed, formatMoney } from "../util.js";
+import { makeEmbed, formatMoney, hasAdminRole, hasModRole } from "../util.js";
 import { COLORS } from "../constants.js";
 import { logger } from "../../lib/logger.js";
 
@@ -18,6 +17,11 @@ export async function handleSetupCommand(interaction: ChatInputCommandInteractio
   await interaction.deferReply({ flags: 64 });
 
   const guild = interaction.guild!;
+  const actingMember = await guild.members.fetch(interaction.user.id);
+  if (!hasAdminRole(actingMember, guild)) {
+    return interaction.editReply({ embeds: [makeEmbed(COLORS.DANGER).setDescription("❌ Only Admins can run `/setup`.")] });
+  }
+
   invalidateSetupCache(guild.id);
   const setup = await setupGuild(guild);
 
@@ -58,8 +62,12 @@ export async function handleSetupCommand(interaction: ChatInputCommandInteractio
 
 export async function handleAddMod(interaction: ChatInputCommandInteraction) {
   await interaction.deferReply({ flags: 64 });
-  const target = interaction.options.getUser("user", true);
   const guild = interaction.guild!;
+  const actingMember = await guild.members.fetch(interaction.user.id);
+  if (!hasAdminRole(actingMember, guild)) {
+    return interaction.editReply({ embeds: [makeEmbed(COLORS.DANGER).setDescription("❌ Only Admins can add Mods.")] });
+  }
+  const target = interaction.options.getUser("user", true);
   const member = await guild.members.fetch(target.id);
   const { modRole } = await setupGuild(guild);
 
@@ -75,8 +83,12 @@ export async function handleAddMod(interaction: ChatInputCommandInteraction) {
 
 export async function handleRemoveMod(interaction: ChatInputCommandInteraction) {
   await interaction.deferReply({ flags: 64 });
-  const target = interaction.options.getUser("user", true);
   const guild = interaction.guild!;
+  const actingMember = await guild.members.fetch(interaction.user.id);
+  if (!hasAdminRole(actingMember, guild)) {
+    return interaction.editReply({ embeds: [makeEmbed(COLORS.DANGER).setDescription("❌ Only Admins can remove Mods.")] });
+  }
+  const target = interaction.options.getUser("user", true);
   const member = await guild.members.fetch(target.id);
   const { modRole } = await setupGuild(guild);
 
@@ -91,8 +103,12 @@ export async function handleRemoveMod(interaction: ChatInputCommandInteraction) 
 
 export async function handleAddAdmin(interaction: ChatInputCommandInteraction) {
   await interaction.deferReply({ flags: 64 });
-  const target = interaction.options.getUser("user", true);
   const guild = interaction.guild!;
+  const actingMember = await guild.members.fetch(interaction.user.id);
+  if (!hasAdminRole(actingMember, guild)) {
+    return interaction.editReply({ embeds: [makeEmbed(COLORS.DANGER).setDescription("❌ Only Admins can add Admins.")] });
+  }
+  const target = interaction.options.getUser("user", true);
   const member = await guild.members.fetch(target.id);
   const { adminRole } = await setupGuild(guild);
 
@@ -108,6 +124,11 @@ export async function handleAddAdmin(interaction: ChatInputCommandInteraction) {
 
 export async function handleFlagUser(interaction: ChatInputCommandInteraction) {
   await interaction.deferReply({ flags: 64 });
+  const guild = interaction.guild!;
+  const actingMember = await guild.members.fetch(interaction.user.id);
+  if (!hasModRole(actingMember, guild)) {
+    return interaction.editReply({ embeds: [makeEmbed(COLORS.DANGER).setDescription("❌ Only Admins and Mods can flag users.")] });
+  }
   const target = interaction.options.getUser("user", true);
   const reason = interaction.options.getString("reason") ?? "No reason provided";
 
@@ -147,6 +168,11 @@ export async function handleFlagUser(interaction: ChatInputCommandInteraction) {
 
 export async function handleUnflagUser(interaction: ChatInputCommandInteraction) {
   await interaction.deferReply({ flags: 64 });
+  const guild = interaction.guild!;
+  const actingMember = await guild.members.fetch(interaction.user.id);
+  if (!hasModRole(actingMember, guild)) {
+    return interaction.editReply({ embeds: [makeEmbed(COLORS.DANGER).setDescription("❌ Only Admins and Mods can unflag users.")] });
+  }
   const target = interaction.options.getUser("user", true);
 
   await db.update(users).set({ flagged: false }).where(eq(users.discordId, target.id));
@@ -235,6 +261,11 @@ export async function adjustUserBalance(opts: {
 
 export async function handleAddBalance(interaction: ChatInputCommandInteraction) {
   await interaction.deferReply({ flags: 64 });
+  const guild = interaction.guild!;
+  const actingMember = await guild.members.fetch(interaction.user.id);
+  if (!hasAdminRole(actingMember, guild)) {
+    return interaction.editReply({ embeds: [makeEmbed(COLORS.DANGER).setDescription("❌ Only Admins can add balance.")] });
+  }
   const target = interaction.options.getUser("user", true);
   const amount = interaction.options.getNumber("amount", true);
   const reason = interaction.options.getString("reason") ?? "No reason provided";
@@ -287,6 +318,11 @@ export async function handleAddBalance(interaction: ChatInputCommandInteraction)
 
 export async function handleRemoveBalance(interaction: ChatInputCommandInteraction) {
   await interaction.deferReply({ flags: 64 });
+  const guild = interaction.guild!;
+  const actingMember = await guild.members.fetch(interaction.user.id);
+  if (!hasAdminRole(actingMember, guild)) {
+    return interaction.editReply({ embeds: [makeEmbed(COLORS.DANGER).setDescription("❌ Only Admins can remove balance.")] });
+  }
   const target = interaction.options.getUser("user", true);
   const amount = interaction.options.getNumber("amount", true);
   const reason = interaction.options.getString("reason") ?? "No reason provided";
@@ -362,25 +398,13 @@ interface WalletMigrationTarget {
 }
 
 export async function handleNotifyWalletMigration(interaction: ChatInputCommandInteraction) {
-  // Admin-only — this command can DM every active member. Permission
-  // gate mirrors /massdm.
-  const perms = interaction.member?.permissions;
-  const hasPerm =
-    typeof perms === "object" && perms !== null && "has" in perms
-      ? perms.has(PermissionFlagsBits.Administrator)
-      : false;
-  if (!hasPerm) {
-    return interaction.reply({ content: "❌ Only admins can use this command.", flags: 64 });
+  const guild = interaction.guild!;
+  const actingMember = await guild.members.fetch(interaction.user.id);
+  if (!hasAdminRole(actingMember, guild)) {
+    return interaction.reply({ embeds: [makeEmbed(COLORS.DANGER).setDescription("❌ Only Admins can use this command.")], flags: 64 });
   }
 
   await interaction.deferReply({ flags: 64 });
-
-  const guild = interaction.guild;
-  if (!guild) {
-    return interaction.editReply({
-      embeds: [makeEmbed(COLORS.DANGER).setDescription("❌ Run this inside the server.")],
-    });
-  }
 
   // Pull every verified user with a non-empty wallet bag. We filter the
   // legacy-string check in JS because each entry's shape varies.

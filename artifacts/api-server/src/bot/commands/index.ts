@@ -1,6 +1,5 @@
 import {
   SlashCommandBuilder,
-  PermissionFlagsBits,
 } from "discord.js";
 import { TASK_TYPES, COIN_CHOICES } from "../constants.js";
 
@@ -34,18 +33,15 @@ function buildDigest(): SlashCommandBuilder {
 export function getCommandBuilders(): SlashCommandBuilder[] {
   const verify = new SlashCommandBuilder()
     .setName("verify")
-    .setDescription("Post the public verification panel (admin/mod only)")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages);
+    .setDescription("Post the public verification panel (admin/mod only)");
 
   const setup = new SlashCommandBuilder()
     .setName("setup")
-    .setDescription("Bootstrap categories/channels/roles")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
+    .setDescription("Bootstrap categories/channels/roles");
 
   const createtask = new SlashCommandBuilder()
     .setName("createtask")
     .setDescription("Open the task creation modal")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
     .addStringOption((o) =>
       o.setName("type").setDescription("Task type").setRequired(true)
         .addChoices(...TASK_TYPES.map((t) => ({ name: TASK_TYPE_LABELS[t] ?? t, value: t })))
@@ -78,7 +74,6 @@ export function getCommandBuilders(): SlashCommandBuilder[] {
   const bulktask = new SlashCommandBuilder()
     .setName("bulktask")
     .setDescription("Create multiple tasks from a Google Sheets URL or pasted CSV")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
     .addStringOption((o) =>
       o.setName("sheets_url")
         .setDescription("Public Google Sheets URL (omit to paste CSV manually)")
@@ -169,38 +164,32 @@ export function getCommandBuilders(): SlashCommandBuilder[] {
 
   const resetleaderboard = new SlashCommandBuilder()
     .setName("resetleaderboard")
-    .setDescription("Repost a fresh leaderboard message")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
+    .setDescription("Repost a fresh leaderboard message");
 
   const addmod = new SlashCommandBuilder()
     .setName("addmod")
     .setDescription("Add Mod role to a user")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addUserOption((o) => o.setName("user").setDescription("User to promote").setRequired(true));
 
   const removemod = new SlashCommandBuilder()
     .setName("removemod")
     .setDescription("Remove Mod role from a user")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addUserOption((o) => o.setName("user").setDescription("User to demote").setRequired(true));
 
   const addadmin = new SlashCommandBuilder()
     .setName("addadmin")
     .setDescription("Add Admin role to a user")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addUserOption((o) => o.setName("user").setDescription("User to promote").setRequired(true));
 
   const flag = new SlashCommandBuilder()
     .setName("flag")
     .setDescription("Flag a user (blocks task claiming and payouts)")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
     .addUserOption((o) => o.setName("user").setDescription("User to flag").setRequired(true))
     .addStringOption((o) => o.setName("reason").setDescription("Reason (optional)"));
 
   const unflag = new SlashCommandBuilder()
     .setName("unflag")
     .setDescription("Clear a user's flag")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
     .addUserOption((o) => o.setName("user").setDescription("User to unflag").setRequired(true));
 
   const profile = new SlashCommandBuilder()
@@ -212,7 +201,6 @@ export function getCommandBuilders(): SlashCommandBuilder[] {
   const massdm = new SlashCommandBuilder()
     .setName("massdm")
     .setDescription("Send a DM to server members or one specific user (admin/mod only)")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
     .addUserOption((o) =>
       o.setName("user")
         .setDescription("DM only this user (skips the target group)")
@@ -231,36 +219,30 @@ export function getCommandBuilders(): SlashCommandBuilder[] {
 
   const sendstats = new SlashCommandBuilder()
     .setName("sendstats")
-    .setDescription("Post each verified user a personalized task-stats card in their workspace channel")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages);
+    .setDescription("Post each verified user a personalized task-stats card in their workspace channel");
 
   const notifywalletmigration = new SlashCommandBuilder()
     .setName("notifywalletmigration")
-    .setDescription("DM users with legacy crypto wallets to re-save with a network (admin only)")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
+    .setDescription("DM users with legacy crypto wallets to re-save with a network (admin only)");
 
   const taskhistory = new SlashCommandBuilder()
     .setName("taskhistory")
     .setDescription("Show tasks created by an admin or yourself")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
     .addUserOption((o) => o.setName("user").setDescription("Admin to look up (defaults to you)"));
 
   const payouthistory = new SlashCommandBuilder()
     .setName("payouthistory")
     .setDescription("Show a user's own earning history (submissions they made)")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
     .addUserOption((o) => o.setName("user").setDescription("User to look up (defaults to you)"));
 
   const adminpayouthistory = new SlashCommandBuilder()
     .setName("adminpayouthistory")
     .setDescription("Show payout reviews handled by an admin (reviewer view)")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
     .addUserOption((o) => o.setName("user").setDescription("Admin to look up (defaults to you)"));
 
   const canceltask = new SlashCommandBuilder()
     .setName("canceltask")
     .setDescription("Cancel an open task by ID (admin/mod only)")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
     .addIntegerOption((o) =>
       o.setName("task_id").setDescription("ID of the task to cancel").setRequired(true).setMinValue(1)
     )
@@ -271,7 +253,6 @@ export function getCommandBuilders(): SlashCommandBuilder[] {
   const cancelcampaign = new SlashCommandBuilder()
     .setName("cancelcampaign")
     .setDescription("Cancel all open tasks in a campaign (admin/mod only)")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
     .addIntegerOption((o) =>
       o.setName("campaign_id").setDescription("ID of the campaign to cancel").setRequired(true).setMinValue(1)
     )
@@ -282,7 +263,6 @@ export function getCommandBuilders(): SlashCommandBuilder[] {
   const verifyuser = new SlashCommandBuilder()
     .setName("verifyuser")
     .setDescription("Manually verify or unverify a Discord user (admin/mod only)")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
     .addUserOption((o) =>
       o.setName("user").setDescription("The Discord user to verify or unverify").setRequired(true)
     )
@@ -315,7 +295,6 @@ export function getCommandBuilders(): SlashCommandBuilder[] {
   const testurl = new SlashCommandBuilder()
     .setName("testurl")
     .setDescription("Run a Reddit proof URL through the full validation system and show the result (admin only)")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addStringOption((o) =>
       o.setName("url").setDescription("Full Reddit comment or post URL to test").setRequired(true)
     )
@@ -328,13 +307,11 @@ export function getCommandBuilders(): SlashCommandBuilder[] {
 
   const health = new SlashCommandBuilder()
     .setName("health")
-    .setDescription("Deep health check — DB latency, proxy success rate, Reddit API status (admin only)")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
+    .setDescription("Deep health check — DB latency, proxy success rate, Reddit API status (admin only)");
 
   const addbalance = new SlashCommandBuilder()
     .setName("addbalance")
     .setDescription("Add money to a user's available balance (admin only)")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addUserOption((o) => o.setName("user").setDescription("User to credit").setRequired(true))
     .addNumberOption((o) =>
       o
@@ -349,7 +326,6 @@ export function getCommandBuilders(): SlashCommandBuilder[] {
   const removebalance = new SlashCommandBuilder()
     .setName("removebalance")
     .setDescription("Remove money from a user's available balance (admin only)")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addUserOption((o) => o.setName("user").setDescription("User to debit").setRequired(true))
     .addNumberOption((o) =>
       o

@@ -12,7 +12,7 @@ import { eq, sql, desc } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { serverConfig, weeklyWinners } from "@workspace/db";
 import { setupGuild } from "../setup.js";
-import { makeEmbed, formatMoney, getISOWeekStart, medalFor } from "../util.js";
+import { makeEmbed, formatMoney, getISOWeekStart, medalFor, hasModRole } from "../util.js";
 import { COLORS } from "../constants.js";
 import { logger } from "../../lib/logger.js";
 import { leaderboardSnapshotCache, invalidateLeaderboard } from "../cache.js";
@@ -449,6 +449,10 @@ export async function handleLeaderboardCommand(interaction: ChatInputCommandInte
 export async function handleResetLeaderboard(interaction: ChatInputCommandInteraction) {
   await interaction.deferReply({ flags: 64 });
   const guild = interaction.guild!;
+  const actingMember = await guild.members.fetch(interaction.user.id);
+  if (!hasModRole(actingMember, guild)) {
+    return interaction.editReply({ embeds: [makeEmbed(COLORS.DANGER).setDescription("❌ Only Admins and Mods can reset the leaderboard.")] });
+  }
 
   try {
     await db
