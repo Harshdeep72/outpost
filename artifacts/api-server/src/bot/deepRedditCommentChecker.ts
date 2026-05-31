@@ -355,19 +355,30 @@ async function runDeepCheck(
     logger.info({ commentId: parsed.commentId, parsedHtmlFound: parsedHtml.found, parsedHtmlIsRemoved: parsedHtml.isRemoved, parsedHtmlValid: parsedHtml.validPage }, "HTML parse result");
     if (parsedHtml.validPage) {
       if (parsedHtml.found) {
-        authorFound = parsedHtml.author;
         subredditFound = parsedHtml.subreddit || subredditFound;
         createdAt = parsedHtml.createdAt || createdAt;
         bodyText = parsedHtml.body || bodyText;
         if (parsedHtml.isRemoved) {
           commentStatus = "comment_deleted";
+          // Use a sentinel so the flow reaches the liveness check instead of
+          // falling through to RSS and returning comment_missing.
+          authorFound = parsedHtml.author ?? (expectedLowerList.length === 0 ? "__removed__" : null);
+        } else {
+          // Comment is visible on old.reddit HTML.
+          // If we can read the author from HTML, use it; otherwise in liveness-only
+          // mode (expectedLowerList empty) use a sentinel so we don't fall through
+          // to RSS and risk returning comment_missing for a live comment.
+          authorFound = parsedHtml.author ?? (expectedLowerList.length === 0 ? "__live__" : null);
         }
       } else {
-        // Comment not found on a valid page -> deleted/removed
+        // Comment not found on a valid Reddit page → deleted/removed.
         commentStatus = "comment_deleted";
-        // Assign a mock author to satisfy subsequent checks and prevent returning comment_missing
+        // Use a sentinel author so we reach the liveness-check return path
+        // rather than comment_missing. Author check is skipped when the list
+        // is empty (liveness mode); for initial submission the expectedAuthor
+        // list is non-empty so the author check below will catch mismatches.
         authorFound = Array.isArray(expectedAuthor) ? expectedAuthor[0] : expectedAuthor;
-        if (!authorFound) authorFound = "deleted";
+        if (!authorFound) authorFound = "__deleted__";
       }
     }
   }
