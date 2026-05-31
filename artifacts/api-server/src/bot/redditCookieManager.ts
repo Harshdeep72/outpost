@@ -105,6 +105,9 @@ async function doRefresh() {
     const cookie = await runRefresher();
     if (cookie) {
       state = { value: cookie, fetchedAt: Date.now(), source: "auto" };
+      // Mirror into process.env so Python subprocesses (curl_cffi client)
+      // automatically inherit the fresh cookie without any extra wiring.
+      process.env.REDDIT_SESSION_COOKIE = cookie;
       scheduleNextRefresh(REFRESH_INTERVAL_MS);
     } else {
       scheduleNextRefresh(RETRY_INTERVAL_MS);
