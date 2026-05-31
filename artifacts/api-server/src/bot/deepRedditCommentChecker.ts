@@ -155,7 +155,13 @@ export function parseHtmlComment(html: string, commentId: string): ParsedHtmlCom
     // Extract subreddit
     const subMatch = fragment.match(/data-subreddit="([^"]+)"/i) || html.match(/class="[^"]*r-([A-Za-z0-9_]+)[^"]*"/i);
     const subreddit = subMatch ? subMatch[1].toLowerCase() : null;
-    
+
+    // Extract creation timestamp — old.reddit puts data-timestamp (ms since epoch)
+    // on the comment element. Without this, the stale-proof check silently skips
+    // when JSON is unavailable (createdAt stays null → check is bypassed).
+    const tsMatch = fragment.match(/data-timestamp="(\d+)"/i);
+    const createdAt = tsMatch ? new Date(parseInt(tsMatch[1], 10)).toISOString() : null;
+
     // Extract body text
     let body: string | null = null;
     const bodyIdx = html.indexOf('class="usertext-body', idx);
@@ -185,7 +191,7 @@ export function parseHtmlComment(html: string, commentId: string): ParsedHtmlCom
       found: true,
       author,
       subreddit,
-      createdAt: null,
+      createdAt,
       isRemoved,
       body,
       validPage: true
