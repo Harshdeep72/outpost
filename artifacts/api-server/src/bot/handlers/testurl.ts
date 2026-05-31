@@ -135,8 +135,9 @@ export async function handleTestUrlCommand(interaction: ChatInputCommandInteract
       fields.push({ name: "⚠️ Failures", value: failureText.slice(0, 1024), inline: false });
     }
 
+    const titleSuffix = passed ? "Passed" : result.status === "api_unreachable" ? "Inconclusive" : "Failed";
     const embed = makeEmbed(color)
-      .setTitle(`🧪 Test URL — ${passed ? "Passed" : "Failed"}`)
+      .setTitle(`🧪 Test URL — ${titleSuffix}`)
       .addFields(fields)
       .setFooter({ text: smokyFooterText(`Checked ${new Date().toUTCString()}`) });
 

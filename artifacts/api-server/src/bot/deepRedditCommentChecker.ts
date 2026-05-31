@@ -403,19 +403,18 @@ async function runDeepCheck(
 
   const htmlUrls = [
     `https://old.reddit.com/${sub}/comments/${parsed.postId}/_/${parsed.commentId}/`,
-    `https://old.reddit.com/${sub}/comments/${parsed.postId}/_/${parsed.commentId}/`
+    `https://www.reddit.com/${sub}/comments/${parsed.postId}/_/${parsed.commentId}/`
   ];
 
   logger.info({ commentId: parsed.commentId }, "Executing parallel deep comment check");
 
-  // Unauthenticated JSON is deprecated and OAuth is not yet configured.
-  // RSS and old.reddit HTML are the primary sources.
-  const [rssHtml, htmlContent] = await Promise.all([
+  const [rssHtml, htmlContent, oauthRes] = await Promise.all([
     proxyFetchText(rssUrls, { timeoutMs: 8000 }).catch(() => null),
-    proxyFetchText(htmlUrls, { timeoutMs: 8000 }).catch(() => null)
+    proxyFetchText(htmlUrls, { timeoutMs: 8000 }).catch(() => null),
+    fetchCommentThreadViaOAuth(sub, parsed.postId, parsed.commentId).catch(() => null),
   ]);
 
-  const effectiveJsonRes = null;
+  const effectiveJsonRes = oauthRes;
   const jsonSource = "oauth" as const;
 
   let authorFound: string | null = null;
