@@ -12,7 +12,7 @@ import { runLivenessTickNow } from "../bot/redditLivenessChecker.js";
 import { invalidateUser } from "../bot/cache.js";
 import { getCooldownConfig, setCooldownConfig, getAutoBumpConfig, setAutoBumpConfig, getMaxRedditAccounts, setMaxRedditAccounts, getProxies, setProxies } from "../lib/settings.js";
 import { reloadProxiesNow, getProxyMetrics } from "../bot/proxy.js";
-import { validateRedditProof } from "../bot/reddit-validator.js";
+import { validateRedditProof, recheckRedditLiveness } from "../bot/reddit-validator.js";
 
 const router = Router();
 
@@ -2356,40 +2356,32 @@ router.post("/reddit-bulk-check", requireAuth, async (req, res) => {
       removalReason: null, error: null,
     };
     try {
-      const validation = await validateRedditProof(url, [], "");
-      if (validation.status === "api_unreachable") {
-        return { ...base, error: "Reddit API unreachable" };
-      }
-      if (validation.status === "not_found") {
-        return { ...base, liveStatus: "not_found", error: "404 — post not found" };
+      // Use recheckRedditLiveness — the same function the periodic liveness
+      // checker uses — so bulk-check results exactly mirror what would happen
+      // in production (multi-source deep check with false-positive guards).
+      const result = await recheckRedditLiveness(url);
+
+      if (result.liveStatus === "unknown") {
+        // "unknown" means Reddit API was unreachable / all sources blocked.
+        // This is NOT a removal — do NOT report it as removed.
+        return { ...base, liveStatus: "error", error: result.reason ?? result.statusLabel ?? "Reddit unreachable — could not determine status" };
       }
 
-      let liveStatus: Row["liveStatus"] = "live";
-      let removalReason: string | null = null;
-
-      if (validation.status === "deleted_by_author" || validation.status === "comment_deleted") {
-        liveStatus = "deleted";
-        removalReason = "Deleted by author";
-      } else if (
-        validation.status === "removed_by_mod" ||
-        validation.status === "removed_by_reddit" ||
-        validation.status === "removed_by_automod" ||
-        validation.status === "comment_missing"
-      ) {
-        liveStatus = "removed";
-        removalReason = `Removed (${validation.statusLabel})`;
-      }
+      let liveStatus: Row["liveStatus"] = result.liveStatus as Row["liveStatus"];
+      const removalReason = (result.liveStatus === "removed" || result.liveStatus === "deleted")
+        ? (result.reason ?? result.statusLabel ?? null)
+        : null;
 
       return {
         url,
         ok: true,
         liveStatus,
-        author: validation.authorFound ?? null,
-        subreddit: validation.subredditFound ?? null,
-        title: validation.title ?? null,
-        createdAt: validation.createdAt ?? null,
+        author: null,   // recheckRedditLiveness is liveness-only, author not returned
+        subreddit: null,
+        title: null,
+        createdAt: null,
         removalReason,
-        error: validation.failures.join("; ") || null,
+        error: result.reason && result.liveStatus === "live" ? result.reason : null,
       };
     } catch (err) {
       const msg = (err as Error)?.message ?? String(err);
